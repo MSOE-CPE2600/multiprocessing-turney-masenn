@@ -1,11 +1,13 @@
-/// 
-//  jpegrw.c
-//  Based on example code found here:
-//  https://www.tspi.at/2020/03/20/libjpegexample.html
-//
-//  Minor changes made to some types.
-//  Compile with -ljpeg
-///
+/**
+ * @file jpegrw.c
+ * @brief JPEG editing file for Multiprocessing lab 2024
+ * 
+ * Course: CPE2600
+ * Section: 011
+ * Assignment: Multiprocessing
+ * Name: Matthew Senn
+ * 
+ */
 #include <stdlib.h>
 #include <stdio.h>
 #include <jpeglib.h>    

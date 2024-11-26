@@ -1,3 +1,13 @@
+/**
+ * @file jpegrw.h
+ * @brief JPEG editing header file for Multiprocessing lab 2024
+ * 
+ * Course: CPE2600
+ * Section: 011
+ * Assignment: Multiprocessing
+ * Name: Matthew Senn
+ * 
+ */
 #ifndef JPEGRW_H
 #define JPEGRW_H
 
