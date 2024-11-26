@@ -11,6 +11,7 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #include "jpegrw.h"
+#include <math.h>
 
 // local routines
 static int iteration_to_color( int i, int max );
@@ -18,7 +19,7 @@ static int iterations_at_point( double x, double y, int max );
 static void compute_image( imgRawImage *img, double xmin, double xmax,
 									double ymin, double ymax, int max );
 static void show_help();
-static void generate_frame(int width, int height, int xcenter, int ycenter, int xscale, int yscale, char* outfile, int max);
+static void generate_frame(int width, int height, int xcenter, int ycenter, double xscale, double yscale, char* outfile, int max);
 
 
 int main( int argc, char *argv[] )
@@ -70,94 +71,43 @@ int main( int argc, char *argv[] )
 				exit(1);
 				break;
 			case 'n':
-				printf("%s",optarg);
 				nprocs = atoi(optarg);
 				break;
 		}
 	}
-	printf("nprocs%d\n",nprocs);
+	yscale = xscale / image_width * image_height;
+	
+	int frames_per_process = total_images / nprocs;
+    int remaining_frames = total_images % nprocs;
 
-	// Calculate y scale based on x scale (settable) and image sizes in X and Y (settable)
-	// yscale = xscale / image_width * image_height;
+    pid_t pids[nprocs];
+    for (int i = 0; i < nprocs; i++) {
+        if ((pids[i] = fork()) == 0) { // Child process
 
-	// Display the configuration of the image.
-	// printf("mandel: x=%lf y=%lf xscale=%lf yscale=%1f max=%d outfile=%s\n",xcenter,ycenter,xscale,yscale,max,outfile);
-
-	// for (int img = 0; img < total_images; img++) {
-    //     if (img % nprocs == 0 && img > 0) {
-    //         // Parent process waits for all child processes to finish before starting next batch
-    //         for (int p = 0; p < nprocs; p++) {
-    //             wait(NULL);
-    //         }
-    //     }
-
-    //     pid_t pid = fork();
-    //     if (pid == 0) { // Child process
-	// 		// xscale = 4 - img; // Example: Decrement `xscale` with each image
-	// 		// yscale = xscale / image_width * image_height; // Recalculate `yscale` proportionally
-
-	// 		xcenter = -0.5 + 0.1 * img; // Move the center
-    // 		ycenter = -0.5 + 0.05 * img; // Adjust center vertically
-
-    //         // double xscale = initial_xscale - img * xscale_decrement; // Vary xscale
-    //         // double yscale = xscale / image_width * image_height; // Adjust yscale proportionally
-    //         char outfile[256];
-    //         snprintf(outfile, sizeof(outfile), "madel%d.jpg", img);
-
-    //         printf("Generating image %d: xscale=%lf yscale=%lf outfile=%s\n",
-    //                img, xscale, yscale, outfile);
-
-    //         generate_frame(image_width, image_height, xcenter, ycenter, xscale, yscale, outfile, max);
-    //         exit(0); // Ensure child process exits after generating the image
-    //     }
-    // }
-
-    // // Wait for the final batch of processes
-    // for (int img = total_images - nprocs; img < total_images; img++) {
-    //     wait(NULL);
-    // }
-
-    // printf("All images generated successfully.\n");
-
-
-
-	yscale = xscale * (double)image_height / image_width;
-
-	int frames_per_proc = total_images / nprocs; // Frames assigned to each process
-    int remaining_frames = total_images % nprocs; // Extra frames if not divisible evenly
-
-    for (int proc = 0; proc < nprocs; proc++) {
-        pid_t pid = fork();
-
-        if (pid == 0) { // Child process
-            int start_frame = proc * frames_per_proc;
-            int end_frame = start_frame + frames_per_proc;
-
-            // Assign remaining frames to the last process
-            if (proc == nprocs - 1) {
-                end_frame += remaining_frames;
+			double curX = xscale;
+			double curY = yscale;
+            int start_frame = i * frames_per_process;
+            int end_frame = start_frame + frames_per_process;
+            if (i == nprocs - 1) {
+                end_frame += remaining_frames; // Last process handles the extra frames
             }
 
-            printf("Process %d: Handling frames %d to %d\n", proc, start_frame, end_frame - 1);
-
-            for (int img = start_frame; img < end_frame; img++) {
-                int current_xscale = xscale - img; // Example: Decrease xscale per frame
-                int current_yscale = current_xscale / image_width * image_height; // Recalculate yscale
-
-                char outfile[256];
-                snprintf(outfile, sizeof(outfile), "madel%d.jpg", img);
-
-                printf("Process %d generating image %d: xscale=%d yscale=%d outfile=%s\n",
-                       proc, img, current_xscale, current_yscale, outfile);
-
-                generate_frame(image_width, image_height, xcenter, ycenter, current_xscale, current_yscale, outfile, max);
+            for (int frame = start_frame; frame < end_frame; frame++) {
+				curX = xscale - frame;
+				curY = curX / image_width*image_height;
+				char outfile[256];
+            	snprintf(outfile, sizeof(outfile), "mandel%d.jpg", frame);
+				generate_frame(image_width, image_height, xcenter, ycenter, curX, curY, outfile, max);
+				printf("Generating image %d: xscale=%lf yscale=%lf outfile=%s\n",frame, curX, curY, outfile);
             }
-
-            exit(0); // Ensure child process exits after finishing its frames
+            exit(0);
+        } else if (pids[i] < 0) { // Fork failed
+            perror("fork");
+            exit(-1);
         }
     }
 
-    // Parent process waits for all children to finish
+    // Parent  waits for all children to finish
     for (int proc = 0; proc < nprocs; proc++) {
         wait(NULL);
     }
@@ -167,7 +117,7 @@ int main( int argc, char *argv[] )
 }
 
 // Function to generate a Mandelbrot image
-void generate_frame(int width, int height, int xcenter, int ycenter, int xscale, int yscale, char* outfile, int max){
+void generate_frame(int width, int height, int xcenter, int ycenter, double xscale, double yscale, char* outfile, int max){
 	imgRawImage* img = initRawImage(width,height);
 
 	// Fill it with a black
