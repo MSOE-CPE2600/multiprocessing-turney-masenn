@@ -11,7 +11,7 @@
 
 The graph represents the asymptotic behavior. The computer only has so many logical cores available to it, so as the number of processes is increased, the performance should hypothetically increase infinitely, however, the limitation of the cores results in the asymptotic behavior. 
 
-It is important to note, that the first frames of the program take much more time than the later ones. Thus, the process who receives the first ones will take longer and the other processes have to wait. 
+It is important to note, that the first frames of the program take much more time than the later ones. Thus, the process who receives the first ones will take longer and the other processes have to wait. This affects the overall asymptotic performance. 
 
 
 
