@@ -9,7 +9,9 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <sys/wait.h>
 #include "jpegrw.h"
+#include <math.h>
 
 // local routines
 static int iteration_to_color( int i, int max );
@@ -17,6 +19,7 @@ static int iterations_at_point( double x, double y, int max );
 static void compute_image( imgRawImage *img, double xmin, double xmax,
 									double ymin, double ymax, int max );
 static void show_help();
+static void generate_frame(int width, int height, int xcenter, int ycenter, double xscale, double yscale, char* outfile, int max);
 
 
 int main( int argc, char *argv[] )
@@ -25,7 +28,6 @@ int main( int argc, char *argv[] )
 
 	// These are the default configuration values used
 	// if no command line arguments are given.
-	const char *outfile = "mandel.jpg";
 	double xcenter = 0;
 	double ycenter = 0;
 	double xscale = 4;
@@ -33,11 +35,13 @@ int main( int argc, char *argv[] )
 	int    image_width = 1000;
 	int    image_height = 1000;
 	int    max = 1000;
+	int    nprocs = 1;
+	int    total_images = 50;
 
 	// For each command line argument given,
 	// override the appropriate configuration value.
 
-	while((c = getopt(argc,argv,"x:y:s:W:H:m:o:h"))!=-1) {
+	while((c = getopt(argc,argv,"x:y:s:W:H:m:o:h:n:p"))!=-1) {
 		switch(c) 
 		{
 			case 'x':
@@ -59,23 +63,62 @@ int main( int argc, char *argv[] )
 				max = atoi(optarg);
 				break;
 			case 'o':
-				outfile = optarg;
+				// outfile = optarg;
+				printf(" ");
 				break;
 			case 'h':
 				show_help();
 				exit(1);
 				break;
+			case 'n':
+				nprocs = atoi(optarg);
+				break;
 		}
 	}
-
-	// Calculate y scale based on x scale (settable) and image sizes in X and Y (settable)
 	yscale = xscale / image_width * image_height;
+	
+	int frames_per_process = total_images / nprocs;
+    int remaining_frames = total_images % nprocs;
 
-	// Display the configuration of the image.
-	printf("mandel: x=%lf y=%lf xscale=%lf yscale=%1f max=%d outfile=%s\n",xcenter,ycenter,xscale,yscale,max,outfile);
+    pid_t pids[nprocs];
+    for (int i = 0; i < nprocs; i++) {
+        if ((pids[i] = fork()) == 0) { // Child process
 
-	// Create a raw image of the appropriate size.
-	imgRawImage* img = initRawImage(image_width,image_height);
+			double curX = xscale;
+			double curY = yscale;
+            int start_frame = i * frames_per_process;
+            int end_frame = start_frame + frames_per_process;
+            if (i == nprocs - 1) {
+                end_frame += remaining_frames; // Last process handles the extra frames
+            }
+
+            for (int frame = start_frame; frame < end_frame; frame++) {
+				curX = xscale - frame;
+				curY = curX / image_width*image_height;
+				char outfile[256];
+            	snprintf(outfile, sizeof(outfile), "mandel%d.jpg", frame);
+				generate_frame(image_width, image_height, xcenter, ycenter, curX, curY, outfile, max);
+				printf("Generating image %d: xscale=%lf yscale=%lf outfile=%s\n",frame, curX, curY, outfile);
+            }
+            exit(0);
+        } else if (pids[i] < 0) { // Fork failed
+            perror("fork");
+            exit(-1);
+        }
+    }
+
+    // Parent  waits for all children to finish
+    for (int proc = 0; proc < nprocs; proc++) {
+        wait(NULL);
+    }
+
+    printf("All images generated successfully.\n");
+    return 0;
+}
+
+// Function to generate a Mandelbrot image
+void generate_frame(int width, int height, int xcenter, int ycenter, double xscale, double yscale, char* outfile, int max){
+	imgRawImage* img = initRawImage(width,height);
 
 	// Fill it with a black
 	setImageCOLOR(img,0);
@@ -89,7 +132,6 @@ int main( int argc, char *argv[] )
 	// free the mallocs
 	freeRawImage(img);
 
-	return 0;
 }
 
 
@@ -160,7 +202,7 @@ Modify this function to make more interesting colors.
 */
 int iteration_to_color( int iters, int max )
 {
-	int color = 0xFFFFFF*iters/(double)max;
+	int color = 0xF0F0FF*iters/(double)max;
 	return color;
 }
 
